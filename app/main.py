@@ -22,22 +22,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS configuration
-raw_frontend_url = settings.FRONTEND_URL
-allowed_origins = [origin.strip().rstrip("/") for origin in raw_frontend_url.split(",")]
-# Add some standard variations for robustness
-final_origins = []
-for origin in allowed_origins:
-    final_origins.append(origin)
-    final_origins.append(f"{origin}/")
-
-# Always allow localhost for development
-if "http://localhost:5173" not in final_origins:
-    final_origins.append("http://localhost:5173")
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=final_origins,
+    allow_origin_regex=r".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
