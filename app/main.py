@@ -3,9 +3,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import settings
+from app.core.config import settings
 from app.services.nlp_service import nlp_service
-from app.routes import spellcheck, predict, chat, files, coherence
+from app.api.v1.api import api_router
 
 
 @asynccontextmanager
@@ -22,7 +22,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.FRONTEND_URL],
@@ -32,11 +32,7 @@ app.add_middleware(
 )
 
 # Routes
-app.include_router(spellcheck.router, prefix="/api")
-app.include_router(predict.router, prefix="/api")
-app.include_router(chat.router, prefix="/api")
-app.include_router(files.router, prefix="/api")
-app.include_router(coherence.router, prefix="/api")
+app.include_router(api_router, prefix="/api")
 
 
 @app.get("/")

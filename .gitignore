@@ -1,6 +1,37 @@
-.venv/
+# Python bytecode
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# Virtual environments
 venv/
-__pycache__/
-*.pyc
+.venv/
+env/
+ENV/
+
+# Sensitive data
 .env
+.env.*
+! .env.example
+
+# Logs
+*.log
+logs/
+
+# Development/IDEs
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# User uploads
 uploads/
+
+# Scratch/Development
+scratch/
+.pytest_cache/
+.coverage
+htmlcov/
+

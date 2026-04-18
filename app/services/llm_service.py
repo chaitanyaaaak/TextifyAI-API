@@ -1,8 +1,12 @@
 import json
+import logging
+from typing import Any
 
 from openai import AsyncOpenAI
 
-from app.config import settings
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 _client: AsyncOpenAI | None = None
 
@@ -10,8 +14,69 @@ _client: AsyncOpenAI | None = None
 def _get_client() -> AsyncOpenAI:
     global _client
     if _client is None:
-        _client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        _client = AsyncOpenAI(
+            base_url=settings.OPENROUTER_BASE_URL,
+            api_key=settings.OPENROUTER_API_KEY,
+            default_headers={
+                "HTTP-Referer": settings.FRONTEND_URL,
+                "X-Title": "TextifyAI",
+            },
+        )
     return _client
+
+
+def safe_extract_content(response: Any) -> str:
+    """Safely extract content from OpenAI response object."""
+    try:
+        if not response.choices:
+            logger.warning("LLM response has no choices")
+            return ""
+        content = response.choices[0].message.content
+        if content is None:
+            logger.warning("LLM response choice has null content")
+            return ""
+        return content.strip()
+    except (AttributeError, IndexError) as e:
+        logger.error(f"Failed to extract content from LLM response: {e}")
+        return ""
+
+
+def safe_json_loads(text: str) -> Any:
+    """
+    Attempt to parse JSON from text, handling potential Markdown code blocks.
+    Returns None if parsing fails.
+    """
+    if not text:
+        return None
+        
+    text = text.strip()
+    
+    # Try direct parse
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+        
+    # Try extracting from triple backticks
+    import re
+    match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except json.JSONDecodeError:
+            pass
+            
+    # Try finding the first '{' and last '}'
+    start = text.find('{')
+    end = text.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(text[start:end+1])
+        except json.JSONDecodeError:
+            pass
+            
+    return None
+
 
 ROLE_SYSTEM_PROMPTS = {
     "lawyer": (
@@ -45,7 +110,7 @@ ROLE_SYSTEM_PROMPTS = {
     "writer": (
         "You are a creative writing assistant. You ONLY answer questions related to "
         "creative writing, storytelling, essays, prose, poetry, and narrative content. "
-        "If the user asks about anything outside the creative writing domain (e.g. law, health, engineering), "
+        "If the user asks about anything outside the creative writing domain (e.g., law, health, engineering), "
         "refuse strictly and say: "
         "'I am specialized in the Creative Writing field only. Please go back and choose your field carefully.'"
     ),
@@ -65,13 +130,13 @@ async def get_predictions(text: str, role: str, count: int = 5) -> list[str]:
 
     client = _get_client()
     response = await client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
+        model=settings.LLM_MODEL,
         messages=[
             {"role": "system", "content": (
                 f"{system_prompt}\n\n"
                 f"The user is typing a sentence. Complete it in {count} different ways. "
                 f"Return ONLY a JSON array of {count} strings, each being a full sentence "
-                f"completion. No explanation, no markdown — just the JSON array."
+                f"completion. No explanation, no markdown; just the JSON array."
             )},
             {"role": "user", "content": text},
         ],
@@ -79,13 +144,10 @@ async def get_predictions(text: str, role: str, count: int = 5) -> list[str]:
         max_tokens=500,
     )
 
-    raw = response.choices[0].message.content.strip()
-    try:
-        predictions = json.loads(raw)
-        if isinstance(predictions, list):
-            return [str(p) for p in predictions[:count]]
-    except json.JSONDecodeError:
-        pass
+    raw = safe_extract_content(response)
+    predictions = safe_json_loads(raw)
+    if isinstance(predictions, list):
+        return [str(p) for p in predictions[:count]]
 
     # Fallback: split by newlines if JSON parsing fails
     lines = [line.strip().strip("-•").strip() for line in raw.split("\n") if line.strip()]
@@ -108,19 +170,19 @@ async def get_chat_reply(role: str, messages: list[dict]) -> str:
     """Get a single chat reply from OpenAI."""
     client = _get_client()
     response = await client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
+        model=settings.LLM_MODEL,
         messages=_build_chat_messages(role, messages),
         temperature=0.7,
         max_tokens=1024,
     )
-    return response.choices[0].message.content
+    return safe_extract_content(response)
 
 
 async def stream_chat_reply(role: str, messages: list[dict]):
     """Yield chat tokens one by one from OpenAI streaming."""
     client = _get_client()
     stream = await client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
+        model=settings.LLM_MODEL,
         messages=_build_chat_messages(role, messages),
         temperature=0.7,
         max_tokens=1024,
@@ -128,9 +190,14 @@ async def stream_chat_reply(role: str, messages: list[dict]):
     )
 
     async for chunk in stream:
-        delta = chunk.choices[0].delta
-        if delta.content:
-            yield delta.content
+        try:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if delta and delta.content:
+                yield delta.content
+        except (AttributeError, IndexError):
+            continue
 
 
 async def get_structured_chat_reply(role: str, messages: list[dict]) -> dict:
@@ -162,20 +229,18 @@ async def get_structured_chat_reply(role: str, messages: list[dict]) -> dict:
 
     client = _get_client()
     response = await client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
+        model=settings.LLM_MODEL,
         messages=chat_messages,
         temperature=0.7,
         max_tokens=512,
         response_format={"type": "json_object"},
     )
 
-    raw = response.choices[0].message.content.strip()
-    try:
-        result = json.loads(raw)
+    raw = safe_extract_content(response)
+    result = safe_json_loads(raw)
+    if result and isinstance(result, dict):
         if result.get("type") in ("chat", "structured"):
             return result
-    except json.JSONDecodeError:
-        pass
 
     # Fallback: treat as casual reply
-    return {"type": "chat", "text": raw[:200]}
+    return {"type": "chat", "text": raw[:200] if raw else "Unexpected AI response format."}

@@ -1,6 +1,7 @@
 from pathlib import Path
 
-import pkg_resources
+from importlib.resources import files
+
 from symspellpy import SymSpell, Verbosity
 
 _MEDICAL_TERMS_PATH = Path(__file__).parent.parent / "data" / "medical_terms.txt"
@@ -16,12 +17,10 @@ class NLPService:
         """Load the SymSpell dictionary and medical whitelist at startup."""
         if self._loaded:
             return
-        dict_path = pkg_resources.resource_filename(
-            "symspellpy", "frequency_dictionary_en_82_765.txt"
-        )
-        self._sym_spell.load_dictionary(dict_path, term_index=0, count_index=1)
+        dict_path = files("symspellpy").joinpath("frequency_dictionary_en_82_765.txt")
+        self._sym_spell.load_dictionary(str(dict_path), term_index=0, count_index=1)
 
-        # Load medical terms whitelist — these words are never flagged as misspellings
+        # Load medical terms whitelist. These words are never flagged as misspellings.
         if _MEDICAL_TERMS_PATH.exists():
             self._whitelist = {
                 line.strip().lower()

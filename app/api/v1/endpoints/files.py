@@ -1,53 +1,23 @@
 from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
 
-from app.config import settings
+from app.core.config import settings
 from app.services.file_service import (
     create_job,
     get_job,
     process_file,
     get_corrected_file_path,
 )
+from app.schemas.files import UploadResponse, StatusResponse, ReportResponse, CorrectionItem
 
 
-router = APIRouter(tags=["Files"])
+router = APIRouter()
 
 MAX_SIZE = settings.MAX_FILE_SIZE_MB * 1024 * 1024  # bytes
-
-
-class UploadResponse(BaseModel):
-    jobId: str
-    status: str
-    fileName: str
-
-
-class StatusResponse(BaseModel):
-    jobId: str
-    status: str
-    step: int
-    totalSteps: int
-    stepLabel: str
-
-
-class CorrectionItem(BaseModel):
-    original: str
-    corrected: str
-    line: int
-
-
-class ReportResponse(BaseModel):
-    jobId: str
-    fileName: str
-    totalWords: int
-    totalErrors: int
-    corrections: list[CorrectionItem]
-
-
 ALLOWED_EXTENSIONS = {".txt", ".pdf", ".csv"}
 
 
-@router.post("/files/upload", response_model=UploadResponse)
+@router.post("/upload", response_model=UploadResponse)
 async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     # Validate file type
     ext = "." + file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
@@ -72,7 +42,7 @@ async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File
     return UploadResponse(jobId=job_id, status="processing", fileName=file.filename)
 
 
-@router.get("/files/status/{job_id}", response_model=StatusResponse)
+@router.get("/status/{job_id}", response_model=StatusResponse)
 async def file_status(job_id: str):
     job = get_job(job_id)
     if not job:
@@ -87,7 +57,7 @@ async def file_status(job_id: str):
     )
 
 
-@router.get("/files/download/{job_id}")
+@router.get("/download/{job_id}")
 async def download_file(job_id: str):
     job = get_job(job_id)
     if not job:
@@ -108,7 +78,7 @@ async def download_file(job_id: str):
     )
 
 
-@router.get("/files/report/{job_id}", response_model=ReportResponse)
+@router.get("/report/{job_id}", response_model=ReportResponse)
 async def file_report(job_id: str):
     job = get_job(job_id)
     if not job:

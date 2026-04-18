@@ -7,10 +7,10 @@ from pathlib import Path
 import chardet
 import pypdf
 
-from app.config import settings
+from app.core.config import settings
 from app.services.nlp_service import nlp_service
 
-# In-memory job store (no database)
+# In-memory job store (using dictionary as no database is configured).
 _jobs: dict[str, dict] = {}
 
 STEPS = [
