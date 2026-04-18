@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     # LLM (OpenRouter/OpenAI compatible)
     OPENROUTER_API_KEY: str = Field(..., env="OPENROUTER_API_KEY")
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
-    LLM_MODEL: str = "google/gemini-2.0-flash-lite-preview-02-05:free"
+    LLM_MODEL: str = Field("google/gemini-2.0-flash-001", env="LLM_MODEL")
 
     # CORS
     # In production, set this to your actual frontend URL (e.g., https://textify.onrender.com)
