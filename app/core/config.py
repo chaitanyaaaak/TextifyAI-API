@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # CORS
     # In production, set this to your actual frontend URL (e.g., https://textify.onrender.com)
-    FRONTEND_URL: str = "https://textify-ai-seven.vercel.app/"
+    FRONTEND_URL: str = Field("https://textify-ai-seven.vercel.app", env="FRONTEND_URL")
 
     # File uploads
     UPLOAD_DIR: str = "./uploads"
